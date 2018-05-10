@@ -1,0 +1,20 @@
+[package]
+authors = ["Andy Caldwell <andrew.caldwell@metaswitch.com>"]
+name = "vigil"
+version = "0.1.0"
+license = "Apache-2.0/MIT"
+categories = ["concurrency"]
+description = "Provides a liveness checking watchdog for detecting deadlocks/livelocks/starvation etc."
+repository = "https://github.com/Metaswitch/vigil"
+keywords = [
+  "threading",
+  "concurrency",
+  "deadlock",
+  "watchdog",
+]
+
+[badges.travis-ci]
+repository = "Metaswitch/vigil"
+
+[dependencies]
+log = "0.3"

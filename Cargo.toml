@@ -14,7 +14,7 @@ keywords = [
 ]
 
 [badges.travis-ci]
-repository = "Metaswitch/vigil"
+repository = "Metaswitch/Vigil"
 
 [dependencies]
 log = "0.3"

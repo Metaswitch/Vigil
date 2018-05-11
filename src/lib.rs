@@ -23,7 +23,7 @@ const DEAD: usize = 4;
 /// Represents a single vigil over the code.  Should be notified every `tick_interval`, if enough
 /// intervals pass without a notification the callback will be fired (on a separate thread).
 pub struct Vigil {
-    inner: Arc<VigilInner>,
+    shared: Arc<VigilShared>,
 }
 
 impl Vigil {
@@ -36,20 +36,22 @@ impl Vigil {
         at_risk_cb: Option<Callback>,
         stall_detected_cb: Option<Callback>,
     ) -> (Self, thread::JoinHandle<()>) {
-        let inner = Arc::new(VigilInner {
+        let shared = Arc::new(VigilShared {
             tick_interval: atomic::AtomicUsize::new(interval_ms),
             state: atomic::AtomicUsize::new(INIT),
             terminated: atomic::AtomicBool::new(false),
+	});
+	let callbacks = VigilCallbacks {
             missed_test_cb,
             at_risk_cb,
             stall_detected_cb,
-        });
+        };
         let thread = thread::spawn({
-            let inner = inner.clone();
-            move || inner.watch()
+            let shared = shared.clone();
+            move || shared.watch(callbacks)
         });
 
-        (Vigil { inner }, thread)
+        (Vigil { shared }, thread)
     }
 
     /// Indicate to the vigil that the code is still active and alive.  This should be done in the
@@ -58,7 +60,7 @@ impl Vigil {
     /// unavailable to notify for an extended period of time, it should use `set_interval` rather
     /// than faking up notifications.
     pub fn notify(&self) {
-        self.inner.state.store(LIVE, atomic::Ordering::Relaxed);
+        self.shared.state.store(LIVE, atomic::Ordering::Relaxed);
     }
 
     /// Change the interval between expected notifications.  Useful if a worker thread is expecting
@@ -66,7 +68,7 @@ impl Vigil {
     /// calculation).  This interval will be changed until `set_interval` is called again (so code
     /// should shorten the interval once the long-blocking work is completed).
     pub fn set_interval(&self, interval_ms: usize) {
-        self.inner
+        self.shared
             .tick_interval
             .store(interval_ms, atomic::Ordering::Relaxed);
         self.notify();
@@ -75,24 +77,28 @@ impl Vigil {
 
 impl Drop for Vigil {
     fn drop(&mut self) {
-        self.inner.terminated.store(true, atomic::Ordering::Relaxed);
+        self.shared.terminated.store(true, atomic::Ordering::Relaxed);
     }
 }
 
-type Callback = Box<Fn() + Sync + Send + 'static>;
+type Callback = Box<Fn() + Send + 'static>;
 
-/// The inner state of a vigil.  This is shared between all vigil handles and the watcher thread.
-struct VigilInner {
+/// The shared state of a vigil.  This is shared between all vigil handles and the watcher thread.
+struct VigilShared {
     tick_interval: atomic::AtomicUsize,
     state: atomic::AtomicUsize,
     terminated: atomic::AtomicBool,
+}
+
+/// The callbacks associated with the Vigil
+struct VigilCallbacks {
     missed_test_cb: Option<Callback>,
     at_risk_cb: Option<Callback>,
     stall_detected_cb: Option<Callback>,
 }
 
-impl VigilInner {
-    fn watch(&self) {
+impl VigilShared {
+    fn watch(&self, callbacks: VigilCallbacks) {
         loop {
             if self.terminated.load(atomic::Ordering::Relaxed) {
                 info!("Vigil is terminating");
@@ -109,7 +115,7 @@ impl VigilInner {
                     warn!("Software missed a test - Temporary glitch/slowdown?");
                     self.state
                         .compare_and_swap(TEST, RISK, atomic::Ordering::Relaxed);
-                    if let Some(ref cb) = self.missed_test_cb {
+                    if let Some(ref cb) = callbacks.missed_test_cb {
                         cb();
                     }
                 }
@@ -117,13 +123,13 @@ impl VigilInner {
                     error!("Software missed multiple tests - Stall detected?");
                     self.state
                         .compare_and_swap(RISK, DEAD, atomic::Ordering::Relaxed);
-                    if let Some(ref cb) = self.at_risk_cb {
+                    if let Some(ref cb) = callbacks.at_risk_cb {
                         cb();
                     }
                 }
                 DEAD => {
                     error!("Software is still unresponsive - Likely stalled");
-                    if let Some(ref cb) = self.stall_detected_cb {
+                    if let Some(ref cb) = callbacks.stall_detected_cb {
                         cb();
                     }
                 }

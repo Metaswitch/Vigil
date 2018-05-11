@@ -1,6 +1,6 @@
 # Vigil
 
-[![Crates.io - Vigil](https://img.shields.io/crates/v/vigil.svg)](https://crates.io/crates/vigil) [![Build Status](https://travis-ci.org/bossmc/vigil.svg?branch=master)](https://travis-ci.org/bossmc/vigil) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-green.svg)](http://www.apache.org/licenses/LICENSE-2.0)
+[![Crates.io - Vigil](https://img.shields.io/crates/v/vigil.svg)](https://crates.io/crates/vigil) [![Build Status](https://travis-ci.org/Metaswitch/Vigil.svg?branch=master)](https://travis-ci.org/Metaswitch/Vigil) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-green.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 
 Software watchdog library for Rust services.
 

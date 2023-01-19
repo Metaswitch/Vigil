@@ -9,9 +9,9 @@
 #[macro_use]
 extern crate log;
 
-use std::thread;
 use std::sync::atomic;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 const INIT: usize = 0;
@@ -40,8 +40,8 @@ impl Vigil {
             tick_interval: atomic::AtomicUsize::new(interval_ms),
             state: atomic::AtomicUsize::new(INIT),
             terminated: atomic::AtomicBool::new(false),
-	});
-	let callbacks = VigilCallbacks {
+        });
+        let callbacks = VigilCallbacks {
             missed_test_cb,
             at_risk_cb,
             stall_detected_cb,
@@ -77,11 +77,13 @@ impl Vigil {
 
 impl Drop for Vigil {
     fn drop(&mut self) {
-        self.shared.terminated.store(true, atomic::Ordering::Relaxed);
+        self.shared
+            .terminated
+            .store(true, atomic::Ordering::Relaxed);
     }
 }
 
-type Callback = Box<Fn() + Send + 'static>;
+type Callback = Box<dyn Fn() + Send + 'static>;
 
 /// The shared state of a vigil.  This is shared between all vigil handles and the watcher thread.
 struct VigilShared {
@@ -113,16 +115,24 @@ impl VigilShared {
                 }
                 TEST => {
                     warn!("Software missed a test - Temporary glitch/slowdown?");
-                    self.state
-                        .compare_and_swap(TEST, RISK, atomic::Ordering::Relaxed);
+                    let _ = self.state.compare_exchange(
+                        TEST,
+                        RISK,
+                        atomic::Ordering::Relaxed,
+                        atomic::Ordering::Relaxed,
+                    );
                     if let Some(ref cb) = callbacks.missed_test_cb {
                         cb();
                     }
                 }
                 RISK => {
                     error!("Software missed multiple tests - Stall detected?");
-                    self.state
-                        .compare_and_swap(RISK, DEAD, atomic::Ordering::Relaxed);
+                    let _ = self.state.compare_exchange(
+                        RISK,
+                        DEAD,
+                        atomic::Ordering::Relaxed,
+                        atomic::Ordering::Relaxed,
+                    );
                     if let Some(ref cb) = callbacks.at_risk_cb {
                         cb();
                     }
@@ -160,7 +170,7 @@ mod tests {
                 move || status.store(RISK, atomic::Ordering::Relaxed)
             }),
             Box::new({
-                let status = status.clone();
+                let status = status;
                 move || status.store(DEAD, atomic::Ordering::Relaxed)
             }),
         )
@@ -172,10 +182,7 @@ mod tests {
             fn $name() {
                 let status = Arc::new(atomic::AtomicUsize::new(INIT));
                 let (a, b, c) = create_callbacks(status.clone());
-                let (vigil, thread) = Vigil::create(100,
-                                                    Some(a),
-                                                    Some(b),
-                                                    Some(c));
+                let (vigil, thread) = Vigil::create(100, Some(a), Some(b), Some(c));
                 for _ in 1..10 {
                     std::thread::sleep(Duration::from_millis(50));
                     vigil.notify();
